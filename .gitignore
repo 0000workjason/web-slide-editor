@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.vite/
+docs/validation/evidence/*.pdf
+*.local
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
