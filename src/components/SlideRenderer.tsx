@@ -5,6 +5,7 @@ import type {
   SlideElement,
 } from '../model/presentation'
 import { AssetImage } from './AssetImage'
+import { getElementTransform } from './elementTransform'
 import { ShapeGraphic } from './ShapeGraphic'
 
 interface SlideRendererProps extends HTMLAttributes<HTMLDivElement> {
@@ -55,6 +56,7 @@ function renderStaticElement(element: SlideElement) {
     width: element.width,
     height: element.height,
     opacity: element.opacity ?? 1,
+    transform: getElementTransform(element),
   }
 
   if (element.type === 'image') {

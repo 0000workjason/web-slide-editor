@@ -17,6 +17,8 @@ export function PresentationMode({
   onExit,
 }: PresentationModeProps) {
   const [activeSlideId, setActiveSlideId] = useState(initialSlideId)
+  const [blanked, setBlanked] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const { viewportRef, scale } = useCanvasScale(
     presentation.canvas.width,
     presentation.canvas.height,
@@ -36,12 +38,44 @@ export function PresentationMode({
     onSlideChange(slideId)
   }, [onSlideChange, presentation.slideOrder])
 
+  const toggleFullscreen = useCallback(() => {
+    const request = document.fullscreenElement
+      ? document.exitFullscreen()
+      : viewportRef.current?.requestFullscreen?.()
+    void request?.catch(() => undefined)
+  }, [viewportRef])
+
+  const exitPresentation = useCallback(() => {
+    if (document.fullscreenElement === viewportRef.current) {
+      void document.exitFullscreen().catch(() => undefined)
+    }
+    onExit()
+  }, [onExit, viewportRef])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === viewportRef.current)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [viewportRef])
+
   useEffect(() => {
     viewportRef.current?.focus()
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        onExit()
+        exitPresentation()
+        return
+      }
+      if (event.key.toLowerCase() === 'b') {
+        event.preventDefault()
+        setBlanked((current) => !current)
+        return
+      }
+      if (event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        toggleFullscreen()
         return
       }
       if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
@@ -66,7 +100,14 @@ export function PresentationMode({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeIndex, onExit, presentation.slideOrder.length, selectIndex, viewportRef])
+  }, [
+    activeIndex,
+    exitPresentation,
+    presentation.slideOrder.length,
+    selectIndex,
+    toggleFullscreen,
+    viewportRef,
+  ])
 
   const slide = presentation.slides[presentation.slideOrder[activeIndex]]
 
@@ -86,12 +127,18 @@ export function PresentationMode({
           height: presentation.canvas.height * scale,
         }}
       >
-        <SlideRenderer
-          slide={slide}
-          canvas={presentation.canvas}
-          style={{ transform: `scale(${scale})` }}
-        />
+        <div
+          key={slide.id}
+          className={`presentation-mode__slide is-${slide.transition ?? 'none'}`}
+        >
+          <SlideRenderer
+            slide={slide}
+            canvas={presentation.canvas}
+            style={{ transform: `scale(${scale})` }}
+          />
+        </div>
       </div>
+      {blanked && <div className="presentation-mode__blank" aria-label="播放黑畫面" />}
       <div className="presentation-mode__controls">
         <button
           type="button"
@@ -112,7 +159,23 @@ export function PresentationMode({
         >
           →
         </button>
-        <button type="button" onClick={onExit}>結束播放</button>
+        <button
+          type="button"
+          aria-pressed={blanked}
+          title="B"
+          onClick={() => setBlanked((current) => !current)}
+        >
+          {blanked ? '返回投影片' : '黑畫面'}
+        </button>
+        <button
+          type="button"
+          aria-label={isFullscreen ? '離開全螢幕' : '進入全螢幕'}
+          title="F"
+          onClick={toggleFullscreen}
+        >
+          {isFullscreen ? '離開全螢幕' : '全螢幕'}
+        </button>
+        <button type="button" onClick={exitPresentation}>結束播放</button>
       </div>
     </section>
   )

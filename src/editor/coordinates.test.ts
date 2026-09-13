@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampElementPosition,
+  pointerRotation,
   resizeElement,
   screenDeltaToCanvas,
 } from './coordinates'
@@ -24,6 +25,17 @@ describe('clampElementPosition', () => {
     expect(
       clampElementPosition({ x: -20, y: 920 }, elementSize, canvasSize),
     ).toEqual({ x: 0, y: 800 })
+  })
+})
+
+describe('pointerRotation', () => {
+  it('measures clockwise rotation and snaps to 15 degrees with Shift', () => {
+    const center = { x: 50, y: 50 }
+
+    expect(pointerRotation(center, { x: 50, y: 0 })).toBe(0)
+    expect(pointerRotation(center, { x: 100, y: 50 })).toBe(90)
+    expect(pointerRotation(center, { x: 0, y: 50 })).toBe(-90)
+    expect(pointerRotation(center, { x: 51, y: 46 }, true)).toBe(15)
   })
 })
 

@@ -6,14 +6,14 @@ A browser-based slide editor built with React and TypeScript. It runs entirely i
 
 ## Features
 
-- Create, duplicate, reorder, skip, and delete slides.
+- Create, duplicate, drag to reorder, skip, and delete slides; set per-slide fade or slide-in transitions.
 - Add editable text, PNG/JPEG images, rectangles, ellipses, lines, and arrows.
 - Drag, resize, marquee-select, group, align, distribute, and reorder elements.
-- Lock element positions, adjust opacity, and crop or replace images.
+- Lock element positions; rotate with a drag handle or numeric field, flip images and shapes, adjust opacity, and crop or replace images.
 - Undo and redo up to 50 document changes.
 - Save automatically to IndexedDB and restore after reopening the browser.
 - Download and import a validated JSON project backup with embedded images.
-- Present with keyboard navigation or export one PDF page per visible slide.
+- Present with keyboard navigation, fullscreen and a black-screen toggle, or export one PDF page per visible slide.
 
 ## Local Development
 
@@ -48,4 +48,4 @@ The document uses a fixed 1600 × 900 logical canvas. Zoom affects rendering and
 
 ## Data and Scope
 
-Presentation data remains in the current browser profile unless the user downloads a project backup. The project targets desktop Chrome and Edge. Cloud collaboration, accounts, PPTX compatibility, and animations are outside the current scope.
+Presentation data remains in the current browser profile unless the user downloads a project backup. The project targets desktop Chrome and Edge. Cloud collaboration, accounts, and PPTX compatibility are outside the current scope.

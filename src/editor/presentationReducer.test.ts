@@ -188,6 +188,30 @@ describe('presentationReducer', () => {
     expect(result.slides['slide-1'].notes).toBe('說明研究方法與限制')
   })
 
+  it('stores and validates slide transitions', () => {
+    const faded = presentationReducer(createInitialDocument(), {
+      type: 'slide/set-transition',
+      slideId: 'slide-1',
+      transition: 'fade',
+    })
+    const cleared = presentationReducer(faded, {
+      type: 'slide/set-transition',
+      slideId: 'slide-1',
+      transition: 'none',
+    })
+
+    expect(faded.slides['slide-1'].transition).toBe('fade')
+    expect(cleared.slides['slide-1']).not.toHaveProperty('transition')
+    expect(isPresentationDocument(faded)).toBe(true)
+    expect(isPresentationDocument({
+      ...faded,
+      slides: {
+        ...faded.slides,
+        'slide-1': { ...faded.slides['slide-1'], transition: 'spin' },
+      },
+    })).toBe(false)
+  })
+
   it('stores output visibility and element presentation controls', () => {
     const initial = presentationReducer(createInitialDocument(), {
       type: 'slide/add',
@@ -212,7 +236,13 @@ describe('presentationReducer', () => {
       slideId: 'slide-1',
       element: createTextElement('text-1'),
     })
-    const locked = presentationReducer(withText, {
+    const rotated = presentationReducer(withText, {
+      type: 'element/set-rotation',
+      slideId: 'slide-1',
+      elementId: 'text-1',
+      rotation: 45,
+    })
+    const locked = presentationReducer(rotated, {
       type: 'element/set-position-lock',
       slideId: 'slide-1',
       elementIds: ['text-1'],
@@ -231,6 +261,12 @@ describe('presentationReducer', () => {
       x: 100,
       y: 100,
     })
+    const staysUnrotated = presentationReducer(faded, {
+      type: 'element/set-rotation',
+      slideId: 'slide-1',
+      elementId: 'text-1',
+      rotation: -30,
+    })
 
     expect(hidden.slides['slide-2'].hidden).toBe(true)
     expect(keepsOneVisible).toBe(hidden)
@@ -238,13 +274,79 @@ describe('presentationReducer', () => {
     expect(faded.slides['slide-1'].elements[0]).toMatchObject({
       positionLocked: true,
       opacity: 0.4,
+      rotation: 45,
     })
     expect(staysPut).toBe(faded)
+    expect(staysUnrotated).toBe(faded)
     expect(isPresentationDocument({
       ...hidden,
       slides: {
         ...hidden.slides,
         'slide-1': { ...hidden.slides['slide-1'], hidden: true },
+      },
+    })).toBe(false)
+    expect(isPresentationDocument({
+      ...withText,
+      slides: {
+        ...withText.slides,
+        'slide-1': {
+          ...withText.slides['slide-1'],
+          elements: withText.slides['slide-1'].elements.map((element) => ({
+            ...element,
+            rotation: 181,
+          })),
+        },
+      },
+    })).toBe(false)
+  })
+
+  it('flips images and shapes but ignores text', () => {
+    const initial = createInitialDocument()
+    const withElements = presentationReducer(initial, {
+      type: 'element/add-many',
+      slideId: 'slide-1',
+      elements: [
+        createTextElement('text-1'),
+        createShapeElement('shape-1', 'arrow'),
+      ],
+    })
+    const horizontal = presentationReducer(withElements, {
+      type: 'element/toggle-flip',
+      slideId: 'slide-1',
+      elementId: 'shape-1',
+      axis: 'horizontal',
+    })
+    const both = presentationReducer(horizontal, {
+      type: 'element/toggle-flip',
+      slideId: 'slide-1',
+      elementId: 'shape-1',
+      axis: 'vertical',
+    })
+    const ignoresText = presentationReducer(both, {
+      type: 'element/toggle-flip',
+      slideId: 'slide-1',
+      elementId: 'text-1',
+      axis: 'horizontal',
+    })
+
+    expect(both.slides['slide-1'].elements[1]).toMatchObject({
+      flipHorizontal: true,
+      flipVertical: true,
+    })
+    expect(ignoresText).toBe(both)
+    expect(isPresentationDocument(both)).toBe(true)
+    expect(isPresentationDocument({
+      ...both,
+      slides: {
+        ...both.slides,
+        'slide-1': {
+          ...both.slides['slide-1'],
+          elements: both.slides['slide-1'].elements.map((element) => (
+            element.id === 'shape-1'
+              ? { ...element, flipHorizontal: 'yes' }
+              : element
+          )),
+        },
       },
     })).toBe(false)
   })

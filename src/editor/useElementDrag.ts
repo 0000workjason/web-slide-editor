@@ -1,6 +1,7 @@
 import { useRef, useState, type PointerEventHandler } from 'react'
 import {
   clampElementPosition,
+  pointerRotation,
   resizeElement,
   screenDeltaToCanvas,
   type Point,
@@ -19,6 +20,8 @@ interface UseElementDragOptions {
   onMoveCommit: (point: Point, delta: Point) => void
   onMoveCancel?: () => void
   onResizeCommit: (size: Size) => void
+  rotation?: number
+  onRotationCommit: (rotation: number) => void
   lockAspectRatio?: boolean
 }
 
@@ -34,6 +37,12 @@ interface ResizeState {
   sizeStart: Size
 }
 
+interface RotationState {
+  pointerId: number
+  center: Point
+  moved: boolean
+}
+
 export function useElementDrag({
   position,
   size,
@@ -46,14 +55,20 @@ export function useElementDrag({
   onMoveCommit,
   onMoveCancel,
   onResizeCommit,
+  rotation = 0,
+  onRotationCommit,
   lockAspectRatio = false,
 }: UseElementDragOptions) {
   const dragRef = useRef<DragState | null>(null)
   const resizeRef = useRef<ResizeState | null>(null)
+  const rotationRef = useRef<RotationState | null>(null)
+  const elementRef = useRef<HTMLDivElement>(null)
   const transientPositionRef = useRef<Point | null>(null)
   const transientSizeRef = useRef<Size | null>(null)
+  const transientRotationRef = useRef<number | null>(null)
   const [transientPosition, setTransientPosition] = useState<Point | null>(null)
   const [transientSize, setTransientSize] = useState<Size | null>(null)
+  const [transientRotation, setTransientRotation] = useState<number | null>(null)
 
   const onPointerDown: PointerEventHandler<HTMLDivElement> = (event) => {
     if (event.button !== 0) return
@@ -178,9 +193,66 @@ export function useElementDrag({
     setTransientSize(null)
   }
 
+  const onRotationPointerDown: PointerEventHandler<HTMLButtonElement> = (event) => {
+    if (disabled || event.button !== 0) return
+    const bounds = elementRef.current?.getBoundingClientRect()
+    if (!bounds) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    rotationRef.current = {
+      pointerId: event.pointerId,
+      center: {
+        x: bounds.left + bounds.width / 2,
+        y: bounds.top + bounds.height / 2,
+      },
+      moved: false,
+    }
+  }
+
+  const onRotationPointerMove: PointerEventHandler<HTMLButtonElement> = (event) => {
+    const state = rotationRef.current
+    if (!state || state.pointerId !== event.pointerId) return
+    const nextRotation = pointerRotation(
+      state.center,
+      { x: event.clientX, y: event.clientY },
+      event.shiftKey,
+    )
+    state.moved = true
+    transientRotationRef.current = nextRotation
+    setTransientRotation(nextRotation)
+  }
+
+  const finishRotation: PointerEventHandler<HTMLButtonElement> = (event) => {
+    const state = rotationRef.current
+    if (!state || state.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    rotationRef.current = null
+    if (
+      state.moved &&
+      transientRotationRef.current !== null &&
+      transientRotationRef.current !== rotation
+    ) {
+      onRotationCommit(transientRotationRef.current)
+    }
+    transientRotationRef.current = null
+    setTransientRotation(null)
+  }
+
+  const cancelRotation: PointerEventHandler<HTMLButtonElement> = (event) => {
+    if (rotationRef.current?.pointerId !== event.pointerId) return
+    rotationRef.current = null
+    transientRotationRef.current = null
+    setTransientRotation(null)
+  }
+
   return {
+    elementRef,
     position: transientPosition ?? position,
     size: transientSize ?? size,
+    rotation: transientRotation ?? rotation,
     pointerHandlers: {
       onPointerDown,
       onPointerMove,
@@ -192,6 +264,12 @@ export function useElementDrag({
       onPointerMove: onResizePointerMove,
       onPointerUp: onResizePointerUp,
       onPointerCancel: onResizePointerCancel,
+    },
+    rotationHandleProps: {
+      onPointerDown: onRotationPointerDown,
+      onPointerMove: onRotationPointerMove,
+      onPointerUp: finishRotation,
+      onPointerCancel: cancelRotation,
     },
   }
 }

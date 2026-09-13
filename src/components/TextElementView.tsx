@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { Point, Size } from '../editor/coordinates'
 import { useElementDrag } from '../editor/useElementDrag'
 import type { TextElement } from '../model/presentation'
+import { getElementRotation } from './elementTransform'
 
 interface TextElementViewProps {
   element: TextElement
@@ -21,6 +22,7 @@ interface TextElementViewProps {
   onMoveCommit: (point: Point, delta: Point) => void
   onMoveCancel?: () => void
   onResizeCommit: (size: Size) => void
+  onRotationCommit: (rotation: number) => void
 }
 
 export function TextElementView({
@@ -41,10 +43,19 @@ export function TextElementView({
   onMoveCommit,
   onMoveCancel,
   onResizeCommit,
+  onRotationCommit,
 }: TextElementViewProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const compositionRef = useRef(false)
-  const { position, size, pointerHandlers, resizeHandleProps } = useElementDrag({
+  const {
+    elementRef,
+    position,
+    size,
+    rotation,
+    pointerHandlers,
+    resizeHandleProps,
+    rotationHandleProps,
+  } = useElementDrag({
     position: { x: element.x, y: element.y },
     size: element,
     canvasSize,
@@ -56,6 +67,8 @@ export function TextElementView({
     onMoveCommit,
     onMoveCancel,
     onResizeCommit,
+    rotation: element.rotation,
+    onRotationCommit,
   })
 
   useEffect(() => {
@@ -66,6 +79,7 @@ export function TextElementView({
 
   return (
     <div
+      ref={elementRef}
       className={`slide-element text-element${selected ? ' is-selected' : ''}${editing ? ' is-editing' : ''}${positionLocked ? ' is-position-locked' : ''}`}
       data-element-id={element.id}
       style={{
@@ -73,6 +87,7 @@ export function TextElementView({
         top: position.y + previewOffset.y,
         width: size.width,
         height: size.height,
+        transform: getElementRotation(rotation),
       }}
       {...pointerHandlers}
       onDoubleClick={(event) => {
@@ -120,12 +135,20 @@ export function TextElementView({
         }}
       />
       {showResizeHandle && !editing && (
-        <button
-          className="resize-handle"
-          type="button"
-          aria-label="調整文字框大小"
-          {...resizeHandleProps}
-        />
+        <>
+          <button
+            className="rotation-handle"
+            type="button"
+            aria-label="旋轉文字框"
+            {...rotationHandleProps}
+          />
+          <button
+            className="resize-handle"
+            type="button"
+            aria-label="調整文字框大小"
+            {...resizeHandleProps}
+          />
+        </>
       )}
     </div>
   )

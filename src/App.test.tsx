@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -200,7 +200,7 @@ describe('App', () => {
     await waitFor(() => expect(printSpy).toHaveBeenCalledOnce())
   })
 
-  it('locks an element position and changes its opacity', async () => {
+  it('locks layout changes and updates appearance', async () => {
     const user = userEvent.setup()
     const { container } = render(<App />)
 
@@ -209,6 +209,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '鎖定位置' }))
 
     expect(screen.getByRole('spinbutton', { name: 'X' })).toBeDisabled()
+    expect(screen.getByRole('spinbutton', { name: '旋轉角度 (°)' })).toBeDisabled()
     fireEvent.keyDown(window, { key: 'ArrowRight' })
     expect(container.querySelector('.text-element')).toHaveStyle({ left: '180px' })
 
@@ -216,6 +217,50 @@ describe('App', () => {
     fireEvent.change(opacity, { target: { value: '40' } })
     fireEvent.blur(opacity)
     expect(container.querySelector('.text-element textarea')).toHaveStyle({ opacity: '0.4' })
+
+    await user.click(screen.getByRole('button', { name: '解除位置鎖定' }))
+    const rotation = screen.getByRole('spinbutton', { name: '旋轉角度 (°)' })
+    fireEvent.change(rotation, { target: { value: '30' } })
+    fireEvent.blur(rotation)
+    expect(container.querySelector('.text-element')).toHaveStyle({
+      transform: 'rotate(30deg)',
+    })
+    for (const element of container.querySelectorAll('.static-slide-element')) {
+      expect(element).toHaveStyle({ transform: 'rotate(30deg) scale(1, 1)' })
+    }
+  })
+
+  it('rotates a selected element by dragging its rotation handle', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    await user.click(await getReadyAddButton())
+    fireEvent.blur(screen.getByRole('textbox', { name: '文字內容' }))
+
+    const element = container.querySelector<HTMLElement>('.text-element')!
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 100, 100),
+    )
+    const handle = screen.getByRole('button', { name: '旋轉文字框' })
+    fireEvent.pointerDown(handle, {
+      pointerId: 21,
+      button: 0,
+      clientX: 50,
+      clientY: 0,
+    })
+    fireEvent.pointerMove(handle, {
+      pointerId: 21,
+      clientX: 100,
+      clientY: 50,
+    })
+
+    expect(element).toHaveStyle({ transform: 'rotate(90deg)' })
+    fireEvent.pointerUp(handle, {
+      pointerId: 21,
+      clientX: 100,
+      clientY: 50,
+    })
+    expect(screen.getByRole('spinbutton', { name: '旋轉角度 (°)' }))
+      .toHaveValue(90)
   })
 
   it('duplicates and deletes the active slide while keeping one slide', async () => {
@@ -257,6 +302,48 @@ describe('App', () => {
       'page',
     )
     expect(screen.getByRole('button', { name: '將目前投影片往前移' })).toBeDisabled()
+  })
+
+  it('reorders slides by dragging a thumbnail', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await getReadyAddButton()
+    await user.click(screen.getByRole('button', { name: '新增投影片' }))
+    await user.click(screen.getByRole('button', { name: '新增投影片' }))
+
+    const source = screen.getByRole('button', { name: '投影片 3' })
+    const target = screen.getByRole('button', { name: '投影片 1' })
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      left: 0,
+      width: 100,
+      height: 100,
+      toJSON: () => ({}),
+    })
+    const data = new Map<string, string>()
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: (format: string, value: string) => data.set(format, value),
+      getData: (format: string) => data.get(format) ?? '',
+    }
+
+    fireEvent.dragStart(source, { dataTransfer })
+    const dragOver = createEvent.dragOver(target, { dataTransfer })
+    const drop = createEvent.drop(target, { dataTransfer })
+    Object.defineProperty(dragOver, 'clientY', { value: 10 })
+    Object.defineProperty(drop, 'clientY', { value: 10 })
+    fireEvent(target, dragOver)
+    fireEvent(target, drop)
+
+    expect(screen.getByRole('button', { name: '投影片 1' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 
   it('undoes and redoes a document change', async () => {
@@ -316,12 +403,30 @@ describe('App', () => {
     render(<App />)
     await getReadyAddButton()
     await user.click(screen.getByRole('button', { name: '新增投影片' }))
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '投影片轉場' }),
+      'fade',
+    )
     await user.click(screen.getByRole('button', { name: '播放' }))
 
-    expect(screen.getByRole('dialog', { name: '播放模式' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: '播放模式' })
+    const requestFullscreen = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(dialog, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    })
+    expect(dialog).toBeInTheDocument()
     expect(screen.getByText('2 / 2')).toBeInTheDocument()
+    expect(dialog.querySelector('.presentation-mode__slide')).toHaveClass('is-fade')
+    await user.click(screen.getByRole('button', { name: '進入全螢幕' }))
+    expect(requestFullscreen).toHaveBeenCalledOnce()
+    fireEvent.keyDown(window, { key: 'b' })
+    expect(screen.getByLabelText('播放黑畫面')).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'b' })
+    expect(screen.queryByLabelText('播放黑畫面')).not.toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Home' })
     expect(screen.getByText('1 / 2')).toBeInTheDocument()
+    expect(dialog.querySelector('.presentation-mode__slide')).toHaveClass('is-none')
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog', { name: '播放模式' })).not.toBeInTheDocument()
   })
@@ -380,6 +485,33 @@ describe('App', () => {
     await user.type(screen.getByRole('textbox', { name: '講者備註' }), '提醒說明資料來源')
     expect(screen.getByRole('textbox', { name: '講者備註' }))
       .toHaveValue('提醒說明資料來源')
+  })
+
+  it('flips a shape in the editor and shared renderers', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    await getReadyAddButton()
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '新增圖形' }),
+      'arrow',
+    )
+
+    await user.click(screen.getByRole('button', { name: '水平翻轉' }))
+    await user.click(screen.getByRole('button', { name: '垂直翻轉' }))
+
+    expect(screen.getByRole('button', { name: '水平翻轉' }))
+      .toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '垂直翻轉' }))
+      .toHaveAttribute('aria-pressed', 'true')
+    expect(container.querySelector('.shape-element')).toHaveStyle({
+      transform: 'rotate(0deg)',
+    })
+    expect(container.querySelector('.shape-element .element-visual')).toHaveStyle({
+      transform: 'scale(-1, -1)',
+    })
+    for (const element of container.querySelectorAll('.static-slide-element')) {
+      expect(element).toHaveStyle({ transform: 'rotate(0deg) scale(-1, -1)' })
+    }
   })
 
   it('marquee-selects, cuts, and pastes elements onto another slide', async () => {

@@ -3,6 +3,7 @@ import type {
   PresentationDocument,
   ShapeElement,
   SlideElement,
+  SlideTransition,
   TextElement,
 } from '../model/presentation'
 
@@ -22,6 +23,7 @@ export type PresentationAction =
   | { type: 'slide/set-background'; slideId: string; background: string }
   | { type: 'slide/set-notes'; slideId: string; notes: string }
   | { type: 'slide/set-hidden'; slideId: string; hidden: boolean }
+  | { type: 'slide/set-transition'; slideId: string; transition: SlideTransition }
   | { type: 'element/add'; slideId: string; element: SlideElement }
   | { type: 'element/add-many'; slideId: string; elements: SlideElement[] }
   | {
@@ -71,6 +73,13 @@ export type PresentationAction =
       locked: boolean
     }
   | { type: 'element/set-opacity'; slideId: string; elementId: string; opacity: number }
+  | { type: 'element/set-rotation'; slideId: string; elementId: string; rotation: number }
+  | {
+      type: 'element/toggle-flip'
+      slideId: string
+      elementId: string
+      axis: 'horizontal' | 'vertical'
+    }
   | { type: 'element/reorder'; slideId: string; elementIds: string[]; direction: LayerDirection }
   | { type: 'element/delete'; slideId: string; elementId: string }
   | { type: 'element/delete-many'; slideId: string; elementIds: string[] }
@@ -166,6 +175,14 @@ export function presentationReducer(
     const nextSlide = { ...slide }
     if (action.hidden) nextSlide.hidden = true
     else delete nextSlide.hidden
+    return updateSlide(document, action.slideId, nextSlide)
+  }
+
+  if (action.type === 'slide/set-transition') {
+    if ((slide.transition ?? 'none') === action.transition) return document
+    const nextSlide = { ...slide }
+    if (action.transition === 'none') delete nextSlide.transition
+    else nextSlide.transition = action.transition
     return updateSlide(document, action.slideId, nextSlide)
   }
 
@@ -285,6 +302,19 @@ export function presentationReducer(
       if (element.opacity === action.opacity) return element
       changed = true
       return { ...element, opacity: action.opacity }
+    }
+
+    if (action.type === 'element/set-rotation') {
+      if (element.positionLocked || element.rotation === action.rotation) return element
+      changed = true
+      return { ...element, rotation: action.rotation }
+    }
+
+    if (action.type === 'element/toggle-flip' && element.type !== 'text') {
+      changed = true
+      return action.axis === 'horizontal'
+        ? { ...element, flipHorizontal: !element.flipHorizontal }
+        : { ...element, flipVertical: !element.flipVertical }
     }
 
     if (action.type === 'element/move') {

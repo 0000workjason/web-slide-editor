@@ -5,6 +5,7 @@ export type FontFamily = 'sans-serif' | 'serif' | 'monospace'
 export type ImageFit = 'contain' | 'cover'
 export type ImagePosition = 'center' | 'top' | 'right' | 'bottom' | 'left'
 export type ShapeKind = 'rectangle' | 'ellipse' | 'line' | 'arrow'
+export type SlideTransition = 'none' | 'fade' | 'slide'
 
 interface ElementFrame {
   id: string
@@ -15,6 +16,13 @@ interface ElementFrame {
   groupId?: string
   positionLocked?: boolean
   opacity?: number
+  // ponytail: layout tools use the unrotated frame; add rotated bounds when needed.
+  rotation?: number
+}
+
+interface FlippableElement {
+  flipHorizontal?: boolean
+  flipVertical?: boolean
 }
 
 export interface TextElement extends ElementFrame {
@@ -31,7 +39,7 @@ export interface TextElement extends ElementFrame {
   }
 }
 
-export interface ImageElement extends ElementFrame {
+export interface ImageElement extends ElementFrame, FlippableElement {
   type: 'image'
   assetId: string
   alt: string
@@ -39,7 +47,7 @@ export interface ImageElement extends ElementFrame {
   position?: ImagePosition
 }
 
-export interface ShapeElement extends ElementFrame {
+export interface ShapeElement extends ElementFrame, FlippableElement {
   type: 'shape'
   shape: ShapeKind
   style: {
@@ -56,6 +64,7 @@ export interface Slide {
   background: string
   notes?: string
   hidden?: boolean
+  transition?: SlideTransition
   elements: SlideElement[]
 }
 
@@ -210,6 +219,8 @@ export function isPresentationDocument(
       (slide.notes === undefined ||
         (typeof slide.notes === 'string' && slide.notes.length <= 5000)) &&
       (slide.hidden === undefined || typeof slide.hidden === 'boolean') &&
+      (slide.transition === undefined ||
+        ['none', 'fade', 'slide'].includes(String(slide.transition))) &&
       elementIds.length === slide.elements.length &&
       new Set(elementIds).size === elementIds.length &&
       slide.elements.every((element) => isSlideElement(element, canvas))
@@ -229,6 +240,11 @@ function isSlideElement(
       typeof value.positionLocked !== 'boolean') ||
     (value.opacity !== undefined &&
       (!isNonNegativeNumber(value.opacity) || value.opacity > 1)) ||
+    (value.rotation !== undefined &&
+      (typeof value.rotation !== 'number' ||
+        !Number.isFinite(value.rotation) ||
+        value.rotation < -180 ||
+        value.rotation > 180)) ||
     !isNonNegativeNumber(value.x) ||
     !isNonNegativeNumber(value.y) ||
     !isPositiveNumber(value.width) ||
@@ -243,6 +259,8 @@ function isSlideElement(
     return (
       typeof value.assetId === 'string' &&
       typeof value.alt === 'string' &&
+      isOptionalBoolean(value.flipHorizontal) &&
+      isOptionalBoolean(value.flipVertical) &&
       (value.fit === undefined || ['contain', 'cover'].includes(String(value.fit))) &&
       (value.position === undefined ||
         ['center', 'top', 'right', 'bottom', 'left'].includes(String(value.position)))
@@ -252,6 +270,8 @@ function isSlideElement(
   if (value.type === 'shape') {
     return (
       ['rectangle', 'ellipse', 'line', 'arrow'].includes(String(value.shape)) &&
+      isOptionalBoolean(value.flipHorizontal) &&
+      isOptionalBoolean(value.flipVertical) &&
       isRecord(value.style) &&
       typeof value.style.fill === 'string' &&
       typeof value.style.stroke === 'string' &&
@@ -276,6 +296,10 @@ function isSlideElement(
     (value.style.lineHeight === undefined ||
       (isPositiveNumber(value.style.lineHeight) && value.style.lineHeight <= 3))
   )
+}
+
+function isOptionalBoolean(value: unknown) {
+  return value === undefined || typeof value === 'boolean'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

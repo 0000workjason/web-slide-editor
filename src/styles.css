@@ -325,6 +325,29 @@ textarea:focus-visible {
   opacity: 0.45;
 }
 
+.slide-thumbnail.is-dragging {
+  opacity: 0.4;
+}
+
+.slide-thumbnail.is-drop-before::before,
+.slide-thumbnail.is-drop-after::after {
+  position: absolute;
+  right: 5px;
+  left: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: #e045a8;
+  content: "";
+}
+
+.slide-thumbnail.is-drop-before::before {
+  top: -1px;
+}
+
+.slide-thumbnail.is-drop-after::after {
+  bottom: -1px;
+}
+
 .slide-thumbnail__number {
   padding-top: 18px;
   color: #657086;
@@ -532,6 +555,37 @@ textarea:focus-visible {
   touch-action: none;
 }
 
+.rotation-handle {
+  position: absolute;
+  top: -52px;
+  left: 50%;
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #4c61ff;
+  box-shadow: 0 0 0 1px #4c61ff;
+  cursor: grab;
+  touch-action: none;
+  transform: translateX(-50%);
+}
+
+.rotation-handle::after {
+  position: absolute;
+  top: 18px;
+  left: 7px;
+  width: 2px;
+  height: 32px;
+  background: #4c61ff;
+  content: "";
+}
+
+.rotation-handle:active {
+  cursor: grabbing;
+}
+
 .snap-guide {
   position: absolute;
   z-index: 10;
@@ -697,16 +751,54 @@ textarea:focus-visible {
   box-shadow: 0 18px 70px rgba(0, 0, 0, 0.55);
 }
 
+.presentation-mode__slide {
+  position: absolute;
+  inset: 0;
+}
+
+.presentation-mode__slide.is-fade {
+  animation: presentation-fade 280ms ease-out;
+}
+
+.presentation-mode__slide.is-slide {
+  animation: presentation-slide 320ms ease-out;
+}
+
+@keyframes presentation-fade {
+  from { opacity: 0; }
+}
+
+@keyframes presentation-slide {
+  from {
+    opacity: 0;
+    transform: translateX(5%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presentation-mode__slide {
+    animation: none;
+  }
+}
+
 .presentation-mode__frame .slide-renderer {
   position: absolute;
   inset: 0;
   transform-origin: top left;
 }
 
+.presentation-mode__blank {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: #000;
+}
+
 .presentation-mode__controls {
   position: fixed;
   right: 24px;
   bottom: 20px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;

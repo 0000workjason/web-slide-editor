@@ -39,6 +39,17 @@ export function clampElementPosition(
   }
 }
 
+export function pointerRotation(
+  center: Point,
+  pointer: Point,
+  snapToFifteenDegrees = false,
+) {
+  const degrees = Math.atan2(pointer.y - center.y, pointer.x - center.x) * 180 / Math.PI + 90
+  const normalized = ((degrees + 180) % 360 + 360) % 360 - 180
+  const step = snapToFifteenDegrees ? 15 : 1
+  return Math.round(normalized / step) * step
+}
+
 export function resizeElement(
   position: Point,
   size: Size,

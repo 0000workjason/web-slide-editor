@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { ImageElementView } from './components/ImageElementView'
@@ -40,6 +41,7 @@ import {
   type ImagePosition,
   type ShapeKind,
   type SlideElement,
+  type SlideTransition,
   type TextAlign,
 } from './model/presentation'
 import { PrintDocument } from './print/PrintDocument'
@@ -58,6 +60,7 @@ import {
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25] as const
 type StorageStatus = 'loading' | 'unsaved' | 'saving' | 'saved' | 'error'
 type PrintStatus = 'idle' | 'preparing' | 'error'
+type SlideDropPlacement = 'before' | 'after'
 
 const STORAGE_LABELS: Record<StorageStatus, string> = {
   loading: '正在載入本機內容',
@@ -121,6 +124,11 @@ function duplicateElements(elements: SlideElement[], offset = 0) {
 function projectFileName(name: string) {
   const safeName = name.trim().replace(/[<>:"/\\|?*\p{Cc}]/gu, '_')
   return `${safeName || 'presentation'}.slide-project.json`
+}
+
+function getSlideDropPlacement(event: ReactDragEvent<HTMLElement>): SlideDropPlacement {
+  const bounds = event.currentTarget.getBoundingClientRect()
+  return event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
 }
 
 interface InspectorNumberFieldProps {
@@ -203,6 +211,11 @@ export default function App() {
   const [projectBusy, setProjectBusy] = useState(false)
   const [presenting, setPresenting] = useState(false)
   const [printStatus, setPrintStatus] = useState<PrintStatus>('idle')
+  const [draggedSlideId, setDraggedSlideId] = useState<string | null>(null)
+  const [slideDropTarget, setSlideDropTarget] = useState<{
+    slideId: string
+    placement: SlideDropPlacement
+  } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replaceImageInputRef = useRef<HTMLInputElement>(null)
   const projectInputRef = useRef<HTMLInputElement>(null)
@@ -370,6 +383,37 @@ export default function App() {
       slideId: resolvedActiveSlideId,
       toIndex: currentIndex + direction,
     })
+  }
+
+  const dropSlide = (
+    event: ReactDragEvent<HTMLButtonElement>,
+    targetSlideId: string,
+  ) => {
+    event.preventDefault()
+    const sourceSlideId = event.dataTransfer.getData('text/plain') || draggedSlideId
+    if (!sourceSlideId) {
+      setDraggedSlideId(null)
+      setSlideDropTarget(null)
+      return
+    }
+    const sourceIndex = presentation.slideOrder.indexOf(sourceSlideId)
+    const targetIndex = presentation.slideOrder.indexOf(targetSlideId)
+    if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+      setDraggedSlideId(null)
+      setSlideDropTarget(null)
+      return
+    }
+
+    const placement = getSlideDropPlacement(event)
+    let toIndex = targetIndex + (placement === 'after' ? 1 : 0)
+    if (sourceIndex < toIndex) toIndex -= 1
+    updateDocument({
+      type: 'slide/move',
+      slideId: sourceSlideId,
+      toIndex,
+    })
+    setDraggedSlideId(null)
+    setSlideDropTarget(null)
   }
 
   const selectElement = (element: SlideElement, additive: boolean) => {
@@ -707,6 +751,12 @@ export default function App() {
         elementId: element.id,
         frame: { x: element.x, y: element.y, width, height },
       }),
+    onRotationCommit: (rotation: number) => updateDocument({
+      type: 'element/set-rotation',
+      slideId: resolvedActiveSlideId,
+      elementId: element.id,
+      rotation,
+    }),
   })
 
   const importImage = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -897,6 +947,26 @@ export default function App() {
       slideId: resolvedActiveSlideId,
       elementId: selectedElement.id,
       opacity: percentage / 100,
+    })
+  }
+
+  const setSelectedRotation = (rotation: number) => {
+    if (!selectedElement || selectedElement.positionLocked) return
+    updateDocument({
+      type: 'element/set-rotation',
+      slideId: resolvedActiveSlideId,
+      elementId: selectedElement.id,
+      rotation,
+    })
+  }
+
+  const toggleSelectedFlip = (axis: 'horizontal' | 'vertical') => {
+    if (!selectedElement || selectedElement.type === 'text') return
+    updateDocument({
+      type: 'element/toggle-flip',
+      slideId: resolvedActiveSlideId,
+      elementId: selectedElement.id,
+      axis,
     })
   }
 
@@ -1228,11 +1298,32 @@ export default function App() {
           {presentation.slideOrder.map((slideId, index) => (
             <button
               key={slideId}
-              className={`slide-thumbnail${slideId === resolvedActiveSlideId ? ' is-active' : ''}${presentation.slides[slideId].hidden ? ' is-hidden' : ''}`}
+              className={`slide-thumbnail${slideId === resolvedActiveSlideId ? ' is-active' : ''}${presentation.slides[slideId].hidden ? ' is-hidden' : ''}${draggedSlideId === slideId ? ' is-dragging' : ''}${slideDropTarget?.slideId === slideId ? ` is-drop-${slideDropTarget.placement}` : ''}`}
               type="button"
               aria-label={`投影片 ${index + 1}${presentation.slides[slideId].hidden ? '，已略過' : ''}`}
               aria-current={slideId === resolvedActiveSlideId ? 'page' : undefined}
+              draggable={hydrated}
+              title="拖曳可重新排序"
               onClick={() => selectSlide(slideId)}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', slideId)
+                setDraggedSlideId(slideId)
+              }}
+              onDragOver={(event) => {
+                if (!draggedSlideId || draggedSlideId === slideId) return
+                event.preventDefault()
+                event.dataTransfer.dropEffect = 'move'
+                setSlideDropTarget({
+                  slideId,
+                  placement: getSlideDropPlacement(event),
+                })
+              }}
+              onDrop={(event) => dropSlide(event, slideId)}
+              onDragEnd={() => {
+                setDraggedSlideId(null)
+                setSlideDropTarget(null)
+              }}
             >
               <span className="slide-thumbnail__number">{index + 1}</span>
               <span className="slide-thumbnail__page" aria-hidden="true">
@@ -1303,7 +1394,7 @@ export default function App() {
           >
             ＋ 新增投影片
           </button>
-          <p className="slide-rail__note">播放與 PDF 會略過已標記的投影片</p>
+          <p className="slide-rail__note">拖曳縮圖可排序；播放與 PDF 會略過已標記的投影片</p>
         </aside>
 
         <div
@@ -1534,6 +1625,28 @@ export default function App() {
                   max={100}
                   onCommit={setSelectedOpacity}
                 />
+                <InspectorNumberField
+                  label="旋轉角度 (°)"
+                  value={selectedElement.rotation ?? 0}
+                  min={-180}
+                  max={180}
+                  disabled={selectedElement.positionLocked}
+                  onCommit={setSelectedRotation}
+                />
+                {selectedElement.type !== 'text' && (
+                  <>
+                    <button
+                      type="button"
+                      aria-pressed={Boolean(selectedElement.flipHorizontal)}
+                      onClick={() => toggleSelectedFlip('horizontal')}
+                    >水平翻轉</button>
+                    <button
+                      type="button"
+                      aria-pressed={Boolean(selectedElement.flipVertical)}
+                      onClick={() => toggleSelectedFlip('vertical')}
+                    >垂直翻轉</button>
+                  </>
+                )}
               </div>
               {selectedElement.type === 'text' && (
                 <>
@@ -1717,6 +1830,22 @@ export default function App() {
           <div className="inspector-fields">
             <p className="inspector-section-title">投影片</p>
             <div className="inspector-grid">
+              <label className="inspector-field-wide">
+                <span>播放轉場</span>
+                <select
+                  aria-label="投影片轉場"
+                  value={activeSlide.transition ?? 'none'}
+                  onChange={(event) => updateDocument({
+                    type: 'slide/set-transition',
+                    slideId: resolvedActiveSlideId,
+                    transition: event.currentTarget.value as SlideTransition,
+                  })}
+                >
+                  <option value="none">無</option>
+                  <option value="fade">淡入</option>
+                  <option value="slide">滑入</option>
+                </select>
+              </label>
               <label className="inspector-field-wide">
                 <span>背景顏色</span>
                 <input
